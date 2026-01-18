@@ -255,6 +255,69 @@ class RespiriaDataCollector:
         if eco2 > 2000 or tvoc > 500:
             return True
         return False
+
+    def get_ubidots_latest(self, user_id: str) -> Dict:
+        """
+        📡 Récupère les DERNIÈRES données Ubidots directement
+        Utilise l'API /sensors/ubidots/max30102/ du backend
+        
+        Args:
+            user_id: ID de l'utilisateur
+            
+        Returns:
+            Dict avec les dernières valeurs des capteurs
+        """
+        try:
+            # Token Ubidots
+            ubidots_token = "BBUS-IW4Xne31AviZZ0jAAojvf3FczCx8Vw"
+            
+            # Appel API backend pour données MAX30102
+            response = requests.get(
+                f"{self.base_url}/sensors/ubidots/max30102/",
+                params={'api_token': ubidots_token, 'hours': 1},
+                timeout=self.timeout
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                latest = data.get('data', [{}])[0] if data.get('data') else {}
+                
+                # Appel pour DHT11
+                dht_response = requests.get(
+                    f"{self.base_url}/sensors/latest/",
+                    timeout=self.timeout
+                )
+                dht_data = dht_response.json() if dht_response.status_code == 200 else {}
+                
+                return {
+                    'spo2': latest.get('spo2', 96),
+                    'heart_rate': latest.get('heart_rate', 75),
+                    'temperature': dht_data.get('dht11', {}).get('temperature', 25),
+                    'humidity': dht_data.get('dht11', {}).get('humidity', 50),
+                    'eco2': dht_data.get('cjmcu811', {}).get('eco2', 400),
+                    'tvoc': dht_data.get('cjmcu811', {}).get('tvoc', 0),
+                    'device_id': latest.get('device_id', '696c16da6b8f94fd52f77962'),
+                    'timestamp': latest.get('timestamp', datetime.now().isoformat()),
+                    'status': 'success'
+                }
+            else:
+                raise Exception(f"API returned {response.status_code}")
+                
+        except Exception as e:
+            print(f"⚠️ Ubidots latest error: {e}")
+            return {
+                'spo2': 96,
+                'heart_rate': 75,
+                'temperature': 25,
+                'humidity': 50,
+                'eco2': 400,
+                'tvoc': 0,
+                'device_id': '696c16da6b8f94fd52f77962',
+                'timestamp': datetime.now().isoformat(),
+                'status': 'fallback',
+                'error': str(e)
+            }
+
     def get_unified_prediction_data(self, user_id: str, location: Optional[str] = None, 
                                    auth_token: Optional[str] = None) -> Dict:
         """

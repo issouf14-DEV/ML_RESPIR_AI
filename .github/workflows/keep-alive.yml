@@ -1,0 +1,24 @@
+name: Keep-Alive RESPIRIA API
+
+on:
+  schedule:
+    # Ping toutes les 5 minutes (cron expression)
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Permet de lancer manuellement
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping RESPIRIA API
+        run: |
+          echo "🚀 Pinging RESPIRIA API..."
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://ml-respir-ai.onrender.com/health)
+          if [ "$response" = "200" ]; then
+            echo "✅ API is healthy (HTTP $response)"
+          else
+            echo "⚠️ API returned HTTP $response"
+          fi
+          
+      - name: Show timestamp
+        run: echo "⏰ Ping completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
