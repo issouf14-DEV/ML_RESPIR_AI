@@ -26,8 +26,14 @@ except ImportError:
 BACKEND_URL = os.environ.get("RESPIRIA_BACKEND_URL", "https://respira-backend.onrender.com/api/v1")
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
-from data_collector import RespiriaDataCollector
-from respiria_ai_predictor import RespiriaAIPredictor
+# Imports relatifs pour fonctionner avec gunicorn api.app:app
+try:
+    from .data_collector import RespiriaDataCollector
+    from .respiria_ai_predictor import RespiriaAIPredictor
+except ImportError:
+    # Fallback pour exécution directe (python app.py)
+    from data_collector import RespiriaDataCollector
+    from respiria_ai_predictor import RespiriaAIPredictor
 
 # Initialiser les services avec l'URL du backend
 print("🚀 Initialisation des services RESPIRIA AI...")
