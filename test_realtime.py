@@ -54,26 +54,26 @@ try:
 except Exception as e:
     print(f'  Erreur: {e}')
 
-# 3. Test endpoint /predict (base)
-print('\n🔮 TEST PREDICTION /predict...')
-base_payload = {
-    'spo2': sensors['spo2'] if sensors['spo2'] > 0 else 96,
-    'heart_rate': sensors['bpm'] if sensors['bpm'] > 0 else 75,
-    'temperature': sensors['temperature'],
-    'humidity': sensors['humidity'],
-    'co2_level': sensors['eco2'],
-    'pm25': 15,
-    'pollen_level': 3.5,
+# 3. Test endpoint /api/v1/predict (v2.0)
+print('\n🔮 TEST PREDICTION /api/v1/predict (v2.0)...')
+v2_payload = {
+    'user_id': 'ubidots_test',
+    'profile_id': 1,
     'location': 'Abidjan',
     'medication_taken': True,
-    'respiratory_rate': 16
+    'sensor_data': {
+        'spo2': sensors['spo2'] if sensors['spo2'] > 0 else 96,
+        'heart_rate': sensors['bpm'] if sensors['bpm'] > 0 else 75
+    }
 }
 
 try:
-    r = requests.post('https://ml-respir-ai.onrender.com/predict', json=base_payload, timeout=60, verify=False)
+    r = requests.post('https://ml-respir-ai.onrender.com/api/v1/predict', json=v2_payload, timeout=60, verify=False)
     result = r.json()
     print(f'  Status: {r.status_code}')
-    print(json.dumps(result, indent=2))
+    print(f'  Risk Level: {result.get("prediction", {}).get("risk_level")}')
+    print(f'  Risk Score: {result.get("prediction", {}).get("risk_score")}')
+    print(f'  Message: {result.get("message", {}).get("title")}')
 except Exception as e:
     print(f'  Erreur: {e}')
 
