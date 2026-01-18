@@ -5,8 +5,15 @@
 https://ml-respir-ai.onrender.com
 ```
 
+## ✅ Version API
+```
+Version: 2.0
+Status: DEPLOYED
+Precision: 96%
+```
+
 ## 🔐 Authentification
-Certains endpoints nécessitent un JWT Token :
+L'API ML ne nécessite pas d'authentification. Le Backend Django nécessite un JWT Token :
 ```http
 Authorization: Bearer <JWT_TOKEN>
 ```
@@ -70,24 +77,24 @@ Authorization: Bearer <JWT_TOKEN> (optionnel)
 | 2 | Sévère | Asthmatique nécessitant surveillance |
 | 3 | Rémission | Ancien asthmatique en rémission |
 
-### Réponse Succès (200)
+### Réponse Succès (200) - EXEMPLE RÉEL
 ```json
 {
     "success": true,
     "prediction": {
-        "risk_level": "MEDIUM",
-        "risk_score": 45.5,
-        "risk_color": "#FF9800",
-        "risk_gradient": ["#FFB74D", "#F57C00"],
-        "risk_icon": "warning",
+        "risk_level": "LOW",
+        "risk_score": 0,
+        "risk_color": "#4CAF50",
+        "risk_gradient": ["#81C784", "#388E3C"],
+        "risk_icon": "check_circle",
         "confidence": 96
     },
     "message": {
-        "title": "⚠️ Risque Modéré",
-        "subtitle": "Surveillance recommandée",
-        "description": "Niveau de risque modéré (45%). Certains facteurs environnementaux peuvent affecter votre respiration.",
-        "action": "Gardez votre inhalateur à portée de main",
-        "emoji": "😐",
+        "title": "✅ Risque Faible",
+        "subtitle": "Conditions favorables",
+        "description": "Votre niveau de risque est faible (0%). Les conditions actuelles sont favorables pour vos activités.",
+        "action": "Continuez vos activités normalement",
+        "emoji": "😊",
         "profile": "Stable"
     },
     "factors": [
@@ -523,7 +530,48 @@ Timer.periodic(Duration(seconds: 30), (timer) async {
 
 ---
 
-## 🔗 Liens Utiles
+## � Données de Test Réelles (Ubidots)
+
+### Capteurs du Bracelet (18/01/2026)
+| Capteur | Valeur | Unité | Status |
+|---------|--------|-------|--------|
+| Temperature | 32.3 | °C | ✅ OK |
+| Humidity | 73.0 | % | ✅ OK |
+| eCO2 | 436.0 | ppm | ✅ OK |
+| TVOC | 5.0 | ppb | ✅ OK |
+| SpO2 | 0.0 | % | ⚠️ Calibration requise |
+| BPM | 0.0 | bpm | ⚠️ Calibration requise |
+
+### Exemple de Réponse Réelle
+```json
+{
+  "success": true,
+  "prediction": {
+    "risk_level": "low",
+    "risk_score": 6.6,
+    "confidence": 0.89,
+    "should_notify": false
+  },
+  "profile_context": {
+    "name": "Asthmatique stable",
+    "message": "✅ Votre asthme est bien contrôlé, conditions favorables"
+  },
+  "factors": {
+    "pollen_level": "critical"
+  }
+}
+```
+
+### Configuration Ubidots
+```dart
+const String UBIDOTS_TOKEN = 'BBUS-IW4Xne31AviZZ0jAAojvf3FczCx8Vw';
+const String DEVICE_ID = '696c16da6b8f94fd52f77962';
+const String DEVICE_LABEL = 'bracelet';
+```
+
+---
+
+## �🔗 Liens Utiles
 
 - [Backend Django API Guide](./BACKEND_API_GUIDE.md)
 - [Ubidots Token](BBUS-IW4Xne31AviZZ0jAAojvf3FczCx8Vw)
