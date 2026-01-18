@@ -1,12 +1,17 @@
-# requirements.txt
-tabpfn>=0.1.10
-flask>=3.0.0
+# requirements.txt - RESPIRIA AI
+# Core API
+flask>=2.3.0
 flask-cors>=4.0.0
-pandas>=2.1.0
-numpy>=1.26.0
-scikit-learn>=1.3.0
-joblib>=1.3.0
-huggingface-hub>=0.20.0
+gunicorn>=21.0.0
+requests>=2.31.0
+
+# Optional ML (uncomment if needed)
+# pandas>=2.1.0
+# numpy>=1.26.0
+# scikit-learn>=1.3.0
+# joblib>=1.3.0
+# tabpfn>=0.1.10
+# huggingface-hub>=0.20.0
+
+# Utils
 python-dotenv>=1.0.0
-seaborn>=0.12.0
-matplotlib>=3.8.0
