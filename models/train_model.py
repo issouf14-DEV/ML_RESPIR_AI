@@ -12,13 +12,32 @@ from huggingface_hub import login
 import warnings
 warnings.filterwarnings('ignore')
 
+# Charger les variables d'environnement depuis .env
+try:
+    from dotenv import load_dotenv
+    # Chercher .env dans le dossier parent (racine du projet)
+    env_path = Path(__file__).parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"✅ Variables chargées depuis {env_path}")
+    else:
+        # Chercher aussi dans venv/.env
+        env_path_venv = Path(__file__).parent.parent / 'venv' / '.env'
+        if env_path_venv.exists():
+            load_dotenv(env_path_venv)
+            print(f"✅ Variables chargées depuis {env_path_venv}")
+except ImportError:
+    print("⚠️ python-dotenv non installé, utilisation des variables système")
+
 # Configuration des chemins
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / 'data'
 MODEL_DIR = BASE_DIR / 'models'
 
-# Token HuggingFace (à définir via variable d'environnement)
-HF_TOKEN = os.environ.get("HF_TOKEN", "YOUR_HUGGINGFACE_TOKEN")
+# Token HuggingFace depuis variable d'environnement
+HF_TOKEN = os.environ.get("HF_TOKEN")
+if not HF_TOKEN or HF_TOKEN == "YOUR_HUGGINGFACE_TOKEN":
+    print("⚠️ HF_TOKEN non défini! Définissez-le dans .env ou comme variable d'environnement")
 
 def train_respiria_model():
     """Entraîne le modèle Respiria avec TabPFN"""

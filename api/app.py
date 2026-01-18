@@ -15,12 +15,24 @@ except ImportError:
 from datetime import datetime
 import os
 
+# Charger les variables d'environnement
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except ImportError:
+    pass  # dotenv optionnel
+
+# Configuration depuis les variables d'environnement
+BACKEND_URL = os.environ.get("RESPIRIA_BACKEND_URL", "https://respira-backend.onrender.com/api/v1")
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+
 from data_collector import RespiriaDataCollector
 from respiria_ai_predictor import RespiriaAIPredictor
 
-# Initialiser les services
+# Initialiser les services avec l'URL du backend
 print("🚀 Initialisation des services RESPIRIA AI...")
-collector = RespiriaDataCollector()
+print(f"📡 Backend URL: {BACKEND_URL}")
+collector = RespiriaDataCollector(base_url=BACKEND_URL)
 ai_predictor = RespiriaAIPredictor()
 print("✅ Services initialisés")
 

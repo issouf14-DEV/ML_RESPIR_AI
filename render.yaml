@@ -9,3 +9,9 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: RESPIRIA_BACKEND_URL
+        value: https://respira-backend.onrender.com/api/v1
+      - key: DEBUG
+        value: "False"
+      - key: FLASK_ENV
+        value: production
