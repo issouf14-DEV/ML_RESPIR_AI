@@ -1,20 +1,34 @@
 """
 Test RESPIRIA avec données Ubidots en temps réel
 """
-import requests
+import requests  # type: ignore
 import json
-import urllib3
+import warnings
+import os
+
+# Charger les variables d'environnement
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except ImportError:
+    pass
 
 # Désactiver avertissements SSL
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings('ignore')
 
 print('='*60)
 print('TEST COMPLET AVEC DONNEES REELLES UBIDOTS')
 print('='*60)
 
-# Configuration Ubidots
-UBIDOTS_TOKEN = 'BBUS-IW4Xne31AviZZ0jAAojvf3FczCx8Vw'
-DEVICE_LABEL = 'bracelet'
+# Configuration depuis .env
+UBIDOTS_TOKEN = os.environ.get('UBIDOTS_TOKEN')
+DEVICE_LABEL = os.environ.get('UBIDOTS_DEVICE_LABEL', 'bracelet')
+ML_API_URL = os.environ.get('ML_API_URL', 'https://ml-respir-ai.onrender.com')
+
+if not UBIDOTS_TOKEN:
+    print("⚠️ UBIDOTS_TOKEN non défini dans .env")
+    exit(1)
+
 headers = {'X-Auth-Token': UBIDOTS_TOKEN}
 
 # 1. Récupérer données Ubidots réelles
@@ -44,7 +58,7 @@ payload = {
 }
 
 try:
-    r = requests.post('https://ml-respir-ai.onrender.com/predict/auto', json=payload, timeout=60, verify=False)
+    r = requests.post(f'{ML_API_URL}/predict/auto', json=payload, timeout=60, verify=False)
     result = r.json()
     print(f'  Status: {r.status_code}')
     print(f'  Risk Level: {result.get("prediction", {}).get("risk_level")}')
@@ -68,7 +82,7 @@ v2_payload = {
 }
 
 try:
-    r = requests.post('https://ml-respir-ai.onrender.com/api/v1/predict', json=v2_payload, timeout=60, verify=False)
+    r = requests.post(f'{ML_API_URL}/api/v1/predict', json=v2_payload, timeout=60, verify=False)
     result = r.json()
     print(f'  Status: {r.status_code}')
     print(f'  Risk Level: {result.get("prediction", {}).get("risk_level")}')
@@ -80,7 +94,7 @@ except Exception as e:
 # 4. Test health
 print('\n❤️ HEALTH CHECK...')
 try:
-    r = requests.get('https://ml-respir-ai.onrender.com/health', timeout=30, verify=False)
+    r = requests.get(f'{ML_API_URL}/health', timeout=30, verify=False)
     print(f'  Status: {r.status_code}')
     print(json.dumps(r.json(), indent=2))
 except Exception as e:

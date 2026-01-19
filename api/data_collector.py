@@ -1,4 +1,13 @@
 # api/data_collector.py
+import os
+
+# Charger les variables d'environnement
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except ImportError:
+    pass
+
 try:
     import requests  # type: ignore
     REQUESTS_AVAILABLE = True
@@ -8,9 +17,13 @@ except ImportError:
 from typing import Dict, Optional
 from datetime import datetime
 
+# Configuration Ubidots depuis .env
+UBIDOTS_TOKEN = os.environ.get("UBIDOTS_TOKEN")
+UBIDOTS_DEVICE_LABEL = os.environ.get("UBIDOTS_DEVICE_LABEL", "bracelet")
+
 class RespiriaDataCollector:
     """
-    Collecte les données depuis les APIs RESPIRIA Backend 
+    Collecte les données depuis les APIs RESPIRIA Backend et Ubidots
     ✅ APIs COMPLÈTES ET OPÉRATIONNELLES
     """
     
@@ -255,6 +268,74 @@ class RespiriaDataCollector:
         if eco2 > 2000 or tvoc > 500:
             return True
         return False
+
+    def get_ubidots_direct(self) -> Dict:
+        """
+        📡 Récupère les données directement depuis l'API Ubidots
+        Sans passer par le backend Django
+        
+        Returns:
+            Dict avec les dernières valeurs des capteurs
+        """
+        if not UBIDOTS_TOKEN:
+            print("⚠️ UBIDOTS_TOKEN non configuré")
+            return self._default_sensor_data()
+        
+        try:
+            headers = {'X-Auth-Token': UBIDOTS_TOKEN}
+            base_url = f"https://industrial.api.ubidots.com/api/v1.6/devices/{UBIDOTS_DEVICE_LABEL}"
+            
+            sensors = {}
+            variables = ['spo2', 'bpm', 'temperature', 'humidity', 'eco2', 'tvoc']
+            
+            for var in variables:
+                try:
+                    response = requests.get(
+                        f"{base_url}/{var}/lv",
+                        headers=headers,
+                        timeout=5
+                    )
+                    if response.status_code == 200:
+                        sensors[var] = float(response.text)
+                    else:
+                        sensors[var] = 0
+                except:
+                    sensors[var] = 0
+            
+            # Mapper les noms de variables
+            return {
+                'spo2': sensors.get('spo2', 96) if sensors.get('spo2', 0) > 0 else 96,
+                'heart_rate': sensors.get('bpm', 75) if sensors.get('bpm', 0) > 0 else 75,
+                'respiratory_rate': self._estimate_respiratory_rate(sensors.get('bpm', 75)),
+                'temperature_sensor': sensors.get('temperature', 25),
+                'humidity_sensor': sensors.get('humidity', 50),
+                'eco2_ppm': sensors.get('eco2', 400),
+                'tvoc_ppb': sensors.get('tvoc', 0),
+                'smoke_detected': sensors.get('eco2', 400) > 2000 or sensors.get('tvoc', 0) > 500,
+                'timestamp': datetime.now().isoformat(),
+                'source': 'ubidots_direct',
+                'status': 'success'
+            }
+            
+        except Exception as e:
+            print(f"⚠️ Ubidots direct error: {e}")
+            return self._default_sensor_data()
+    
+    def _default_sensor_data(self) -> Dict:
+        """Retourne les valeurs par défaut des capteurs"""
+        return {
+            'spo2': 96,
+            'heart_rate': 75,
+            'respiratory_rate': 16,
+            'temperature_sensor': 25,
+            'humidity_sensor': 50,
+            'eco2_ppm': 400,
+            'tvoc_ppb': 0,
+            'smoke_detected': False,
+            'timestamp': datetime.now().isoformat(),
+            'source': 'default',
+            'status': 'fallback'
+        }
 
     def get_ubidots_latest(self, user_id: str) -> Dict:
         """

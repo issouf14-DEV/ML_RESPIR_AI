@@ -190,6 +190,60 @@ class RespiriaAIPredictor:
         """Calcule le score de risque pour la prise de médicament"""
         return 0 if medication_taken else 10
 
+    def calculate_eco2_score(self, eco2: float) -> float:
+        """
+        Calcule le score de risque pour le eCO2 (CO2 équivalent)
+        Capteur: CJMCU-811
+        
+        Niveaux eCO2:
+        - < 400 ppm : Excellent (extérieur)
+        - 400-1000 ppm : Normal (intérieur bien ventilé)
+        - 1000-2000 ppm : Modéré (ventilation insuffisante)
+        - 2000-5000 ppm : Mauvais (somnolence, maux de tête)
+        - > 5000 ppm : Dangereux
+        """
+        if eco2 > 5000:      # Dangereux
+            return 40
+        elif eco2 > 2500:    # Très mauvais
+            return 30
+        elif eco2 > 2000:    # Mauvais
+            return 22
+        elif eco2 > 1500:    # Modéré-mauvais
+            return 15
+        elif eco2 > 1000:    # Modéré
+            return 10
+        elif eco2 > 800:     # Acceptable
+            return 5
+        else:                # Bon
+            return 0
+
+    def calculate_tvoc_score(self, tvoc: float) -> float:
+        """
+        Calcule le score de risque pour les TVOC (Composés Organiques Volatils Totaux)
+        Capteur: CJMCU-811
+        
+        Niveaux TVOC (ppb):
+        - < 65 ppb : Excellent
+        - 65-220 ppb : Bon
+        - 220-660 ppb : Modéré
+        - 660-2200 ppb : Mauvais
+        - > 2200 ppb : Dangereux
+        """
+        if tvoc > 2200:      # Dangereux
+            return 35
+        elif tvoc > 1000:    # Très mauvais
+            return 25
+        elif tvoc > 660:     # Mauvais
+            return 18
+        elif tvoc > 400:     # Modéré-mauvais
+            return 12
+        elif tvoc > 220:     # Modéré
+            return 8
+        elif tvoc > 65:      # Acceptable
+            return 3
+        else:                # Excellent
+            return 0
+
     def calculate_smoke_score(self, smoke_detected: bool) -> float:
         """Calcule le score de risque pour la détection de fumée"""
         return 70 if smoke_detected else 0  # PRIORITÉ ABSOLUE - Force HIGH
@@ -213,6 +267,8 @@ class RespiriaAIPredictor:
             'temperature': max(-20.0, min(60.0, data.get('temperature', 22.0))),
             'humidity': max(0.0, min(100.0, data.get('humidity', 50.0))),
             'pollen_level': max(0, min(5, data.get('pollen_level', 1))),
+            'eco2': max(0.0, min(10000.0, data.get('eco2', 400.0))),  # eCO2 capteur CJMCU-811
+            'tvoc': max(0.0, min(5000.0, data.get('tvoc', 0.0))),     # TVOC capteur CJMCU-811
             'medication_taken': data.get('medication_taken', True),
             'smoke_detected': data.get('smoke_detected', False)
         }
@@ -226,6 +282,8 @@ class RespiriaAIPredictor:
             'temperature': self.calculate_temperature_score(values['temperature']),
             'humidity': self.calculate_humidity_score(values['humidity']),
             'pollen_level': self.calculate_pollen_score(values['pollen_level']),
+            'eco2': self.calculate_eco2_score(values['eco2']),        # NOUVEAU
+            'tvoc': self.calculate_tvoc_score(values['tvoc']),        # NOUVEAU
             'medication_taken': self.calculate_medication_score(values['medication_taken']),
             'smoke_detected': self.calculate_smoke_score(values['smoke_detected'])
         }
@@ -345,6 +403,16 @@ class RespiriaAIPredictor:
                 'warning': f"🌸 Niveau de pollen élevé ({value}/5)",
                 'info': f"🌸 Niveau de pollen modéré ({value}/5)"
             },
+            'eco2': {
+                'critical': f"🏭 CO2 dangereux ({value} ppm) - Aérez immédiatement!",
+                'warning': f"🏭 CO2 élevé ({value} ppm) - Ventilation insuffisante",
+                'info': f"🏭 CO2 modéré ({value} ppm) - Pensez à aérer"
+            },
+            'tvoc': {
+                'critical': f"☠️ TVOC dangereux ({value} ppb) - Air pollué!",
+                'warning': f"☠️ TVOC élevé ({value} ppb) - Polluants détectés",
+                'info': f"☠️ TVOC modéré ({value} ppb)"
+            },
             'medication_taken': {
                 'critical': "💊 Traitement préventif non pris - Risque accru",
                 'warning': "💊 Traitement préventif non pris",
@@ -453,6 +521,28 @@ class RespiriaAIPredictor:
         if humidity > 80:
             recommendations["environmental"].append("💧 Humidité excessive détectée")
             recommendations["environmental"].append("🌀 Utilisez un déshumidificateur")
+        
+        # RECOMMANDATIONS ECO2 (CO2 du capteur CJMCU-811)
+        eco2 = data.get('eco2', 400)
+        if eco2 > 2000:
+            recommendations["environmental"].append("🏭 CO2 dangereux : aérez immédiatement!")
+            recommendations["environmental"].append("🪟 Ouvrez les fenêtres en grand")
+            recommendations["environmental"].append("🚪 Quittez la pièce si possible")
+        elif eco2 > 1500:
+            recommendations["environmental"].append("🏭 CO2 élevé : ventilation insuffisante")
+            recommendations["environmental"].append("🪟 Ouvrez les fenêtres")
+        elif eco2 > 1000:
+            recommendations["environmental"].append("🏭 CO2 modéré : pensez à aérer")
+        
+        # RECOMMANDATIONS TVOC (polluants du capteur CJMCU-811)
+        tvoc = data.get('tvoc', 0)
+        if tvoc > 660:
+            recommendations["environmental"].append("☠️ TVOC dangereux : air pollué!")
+            recommendations["environmental"].append("🪟 Aérez abondamment")
+            recommendations["environmental"].append("🏃 Éloignez-vous de la source de pollution")
+        elif tvoc > 220:
+            recommendations["environmental"].append("☠️ TVOC modéré : polluants détectés")
+            recommendations["environmental"].append("🪟 Améliorez la ventilation")
         
         return recommendations
 

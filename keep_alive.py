@@ -20,14 +20,22 @@ import sys
 import os
 import socket
 
+# Charger les variables d'environnement
 try:
-    import requests
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except ImportError:
+    pass
+
+try:
+    import requests  # type: ignore
 except ImportError:
     print("❌ Module 'requests' non installé. Exécutez: pip install requests")
     sys.exit(1)
 
-# Configuration
-API_URL = "https://ml-respir-ai.onrender.com/health"
+# Configuration depuis variables d'environnement
+ML_API_URL = os.environ.get("ML_API_URL", "https://ml-respir-ai.onrender.com")
+API_URL = f"{ML_API_URL}/health"
 PING_INTERVAL = 300  # 5 minutes en secondes
 INTERNET_CHECK_INTERVAL = 30  # Vérifier internet toutes les 30 secondes
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keep_alive.log")

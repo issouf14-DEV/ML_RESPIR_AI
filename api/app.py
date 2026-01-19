@@ -32,10 +32,14 @@ try:
 except ImportError:
     pass
 
-# Configuration
+# Configuration depuis variables d'environnement
 BACKEND_URL = os.environ.get("RESPIRIA_BACKEND_URL", "https://respira-backend.onrender.com/api/v1")
-UBIDOTS_TOKEN = os.environ.get("UBIDOTS_TOKEN", "BBUS-IW4Xne31AviZZ0jAAojvf3FczCx8Vw")
+UBIDOTS_TOKEN = os.environ.get("UBIDOTS_TOKEN")
+UBIDOTS_DEVICE_LABEL = os.environ.get("UBIDOTS_DEVICE_LABEL", "bracelet")
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+
+if not UBIDOTS_TOKEN:
+    print("⚠️ UBIDOTS_TOKEN non défini - configurez la variable d'environnement")
 
 # Imports relatifs
 try:
@@ -188,8 +192,13 @@ if FLASK_AVAILABLE:
             weather_data = collector.get_weather_data(location, auth_token)
             air_quality = collector.get_air_quality_data(location, auth_token)
             
-            # 2. Données capteurs Ubidots (si disponibles)
-            sensor_data = collector.get_ubidots_sensors(user_id, auth_token)
+            # 2. Données capteurs - Priorité: Ubidots direct > Backend > Défaut
+            sensor_data = collector.get_ubidots_direct()  # Direct Ubidots
+            if sensor_data.get('status') == 'fallback':
+                # Fallback sur backend si Ubidots échoue
+                sensor_data = collector.get_ubidots_sensors(user_id, auth_token)
+            
+            print(f"📡 Capteurs: SpO2={sensor_data.get('spo2')}, eCO2={sensor_data.get('eco2_ppm')}, TVOC={sensor_data.get('tvoc_ppb')}")
             
             # Construire les données de prédiction
             respiria_data = {
@@ -197,10 +206,12 @@ if FLASK_AVAILABLE:
                 'heart_rate': sensor_override.get('heart_rate', sensor_data.get('heart_rate', 75.0)),
                 'respiratory_rate': sensor_override.get('respiratory_rate', sensor_data.get('respiratory_rate', 16.0)),
                 'aqi': air_quality.get('aqi', 50.0),
-                'temperature': weather_data.get('temperature', 25.0),
-                'humidity': weather_data.get('humidity', 50.0),
+                'temperature': sensor_data.get('temperature_sensor', weather_data.get('temperature', 25.0)),  # Priorité capteur DHT11
+                'humidity': sensor_data.get('humidity_sensor', weather_data.get('humidity', 50.0)),  # Priorité capteur DHT11
                 'pollen_level': air_quality.get('pollen_level', 2),
-                'smoke_detected': sensor_override.get('smoke_detected', False),
+                'eco2': sensor_data.get('eco2_ppm', 400.0),    # Capteur CJMCU-811
+                'tvoc': sensor_data.get('tvoc_ppb', 0.0),      # Capteur CJMCU-811
+                'smoke_detected': sensor_data.get('smoke_detected', sensor_override.get('smoke_detected', False)),
                 'medication_taken': medication_taken,
                 'profile_id': profile_id
             }
