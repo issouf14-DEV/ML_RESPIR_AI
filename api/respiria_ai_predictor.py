@@ -41,85 +41,86 @@ class RespiriaAIPredictor:
             0: {
                 "name": "Prévention",
                 "baseline_risk": "Très faible",
-                "multiplier": 0.8,  # Réduit de 0.3 à 0.8
+                "multiplier": 0.7,  # Personne saine = moins sensible
                 "description": "Personne saine exposée"
             },
             1: {
                 "name": "Asthmatique stable", 
                 "baseline_risk": "Modéré",
-                "multiplier": 1.1,  # Augmenté de 1.0 à 1.1
+                "multiplier": 1.0,  # Référence
                 "description": "Asthme généralement bien contrôlé"
             },
             2: {
                 "name": "Asthmatique sévère",
                 "baseline_risk": "Élevé", 
-                "multiplier": 1.3,  # Réduit de 1.5 à 1.3
+                "multiplier": 1.2,  # Plus sensible
                 "description": "Asthme nécessitant surveillance constante"
             },
             3: {
                 "name": "Rémission",
                 "baseline_risk": "Faible",
-                "multiplier": 0.85,  # Augmenté pour éviter sous-estimation pollen
+                "multiplier": 0.8,  # Moins sensible que stable
                 "description": "Ancien asthmatique en rémission"
             }
         }
         
-        # Seuils de classification des risques - CALIBRÉS POUR 87.5%+ PRÉCISION
+        # Seuils de classification des risques - RECALIBRÉS
+        # Score max possible ≈ 200+ → normalisé sur 100
         self.RISK_THRESHOLDS = {
-            "low": 25,      # Abaissé pour que qualité air moyenne = medium
-            "medium": 70,   # Maintenu à 70
-            "high": 100     # risk_score ≥ 70
+            "low": 30,      # Score < 30 = LOW
+            "medium": 60,   # 30 ≤ Score < 60 = MEDIUM
+            "high": 100     # Score ≥ 60 = HIGH
         }
         
         print("✅ Moteur IA RESPIRIA prêt")
 
     def calculate_spo2_score(self, spo2: float) -> float:
-        """Calcule le score de risque pour SpO2 - AMÉLIORÉ"""
-        # Lookup table pour performance - SpO2 < 90 = HIGH
+        """Calcule le score de risque pour SpO2 - RECALIBRÉ"""
+        # SpO2 < 88 = Urgence médicale, doit être HIGH
         if spo2 < 85:  # Critique extrême
-            return 85
+            return 50
         elif spo2 < 88:  # Critique
-            return 70
-        elif spo2 < 90:  # Sévère - DOIT être HIGH (≥70 = high)
-            return 55
+            return 40
+        elif spo2 < 90:  # Sévère
+            return 30
         elif spo2 < 92:  # Modéré
-            return 38
+            return 18
         elif spo2 < 94:  # Léger
-            return 22
-        elif spo2 < 96:  # Surveillance
             return 10
+        elif spo2 < 96:  # Surveillance
+            return 5
         else:
             return 0
 
     def calculate_heart_rate_score(self, heart_rate: float) -> float:
-        """Calcule le score de risque pour la fréquence cardiaque - OPTIMISÉ"""
-        # Optimisé avec plus de granularité
+        """Calcule le score de risque pour la fréquence cardiaque - RECALIBRÉ"""
+        # Scores réduits pour meilleur équilibre
         if heart_rate > 140:  # Tachycardie sévère
-            return 30
+            return 18
         elif heart_rate > 120:  # Tachycardie modérée
-            return 25
+            return 14
         elif heart_rate > 100:  # Tachycardie légère
-            return 15
-        elif heart_rate > 90:   # Élevé
             return 8
+        elif heart_rate > 90:   # Élevé
+            return 4
         elif heart_rate < 50:   # Bradycardie
             return 12
         else:
             return 0
 
     def calculate_respiratory_rate_score(self, respiratory_rate: float) -> float:
-        """Calcule le score de risque pour la fréquence respiratoire - OPTIMISÉ"""
-        # Optimisé avec détection plus sensible
+        """Calcule le score de risque pour la fréquence respiratoire - RECALIBRÉ"""
+        # Scores recalibrés pour meilleur équilibre
         if respiratory_rate > 35:    # Détresse respiratoire sévère
-            return 40
-        elif respiratory_rate > 30:  # Détresse respiratoire
-            return 30
-        elif respiratory_rate > 25:  # Tachypnée modérée
-            return 20
-        elif respiratory_rate > 22:  # Tachypnée légère
-            return 12
-        elif respiratory_rate < 10:  # Bradypnée (dangereux)
             return 25
+        elif respiratory_rate > 30:  # Détresse respiratoire
+            return 18
+        elif respiratory_rate > 25:  # Tachypnée modérée
+            return 12
+        elif respiratory_rate > 22:  # Tachypnée légère
+            return 6
+        elif respiratory_rate < 10:  # Bradypnée (dangereux)
+            return 20
         else:
             return 0
 
@@ -132,19 +133,19 @@ class RespiriaAIPredictor:
         if cache_key in self._score_cache:
             return self._score_cache[cache_key]
         
-        # Calcul optimisé - AMÉLIORÉ pour AQI extrême
+        # Calcul optimisé - Scores réduits pour meilleur équilibre
         if aqi > 350:      # Extrêmement dangereux
-            score = 45
+            score = 25
         elif aqi > 300:    # Dangereux
-            score = 35
-        elif aqi > 200:    # Très mauvais
-            score = 28
-        elif aqi > 150:    # Mauvais
             score = 20
+        elif aqi > 200:    # Très mauvais
+            score = 16
+        elif aqi > 150:    # Mauvais
+            score = 12
         elif aqi > 100:    # Modéré pour sensibles
-            score = 14
+            score = 8
         elif aqi > 50:     # Modéré
-            score = 7
+            score = 4
         else:              # Bon
             score = 0
             
@@ -174,15 +175,15 @@ class RespiriaAIPredictor:
             return 0
 
     def calculate_pollen_score(self, pollen_level: int) -> float:
-        """Calcule le score de risque pour le pollen - AMÉLIORÉ"""
+        """Calcule le score de risque pour le pollen - RECALIBRÉ"""
         if pollen_level >= 5:    # Pollen extrême
-            return 25
+            return 15
         elif pollen_level >= 4:  # Pollen très élevé
-            return 20
-        elif pollen_level >= 3:  # Pollen élevé
             return 12
+        elif pollen_level >= 3:  # Pollen élevé
+            return 8
         elif pollen_level >= 2:  # Pollen modéré
-            return 6
+            return 4
         else:
             return 0
 
@@ -202,18 +203,19 @@ class RespiriaAIPredictor:
         - 2000-5000 ppm : Mauvais (somnolence, maux de tête)
         - > 5000 ppm : Dangereux
         """
+        # Scores recalibrés
         if eco2 > 5000:      # Dangereux
-            return 40
+            return 25
         elif eco2 > 2500:    # Très mauvais
-            return 30
+            return 18
         elif eco2 > 2000:    # Mauvais
-            return 22
+            return 14
         elif eco2 > 1500:    # Modéré-mauvais
-            return 15
-        elif eco2 > 1000:    # Modéré
             return 10
+        elif eco2 > 1000:    # Modéré
+            return 6
         elif eco2 > 800:     # Acceptable
-            return 5
+            return 3
         else:                # Bon
             return 0
 
@@ -229,14 +231,15 @@ class RespiriaAIPredictor:
         - 660-2200 ppb : Mauvais
         - > 2200 ppb : Dangereux
         """
+        # Scores recalibrés
         if tvoc > 2200:      # Dangereux
-            return 35
+            return 22
         elif tvoc > 1000:    # Très mauvais
-            return 25
+            return 16
         elif tvoc > 660:     # Mauvais
-            return 18
-        elif tvoc > 400:     # Modéré-mauvais
             return 12
+        elif tvoc > 400:     # Modéré-mauvais
+            return 8
         elif tvoc > 220:     # Modéré
             return 8
         elif tvoc > 65:      # Acceptable
@@ -247,6 +250,94 @@ class RespiriaAIPredictor:
     def calculate_smoke_score(self, smoke_detected: bool) -> float:
         """Calcule le score de risque pour la détection de fumée"""
         return 70 if smoke_detected else 0  # PRIORITÉ ABSOLUE - Force HIGH
+
+    def calculate_pm25_score(self, pm25: float) -> float:
+        """
+        Calcule le score de risque pour les PM2.5 (particules fines)
+        Source: API qualité air extérieur
+        
+        Niveaux PM2.5 (µg/m³):
+        - 0-12 : Bon
+        - 12-35 : Modéré
+        - 35-55 : Mauvais pour sensibles
+        - 55-150 : Mauvais
+        - 150-250 : Très mauvais
+        - > 250 : Dangereux
+        """
+        # Scores recalibrés
+        if pm25 > 250:       # Dangereux
+            return 20
+        elif pm25 > 150:     # Très mauvais
+            return 15
+        elif pm25 > 55:      # Mauvais
+            return 12
+        elif pm25 > 35:      # Mauvais pour sensibles
+            return 8
+        elif pm25 > 12:      # Modéré
+            return 3
+        else:                # Bon
+            return 0
+
+    def calculate_pm10_score(self, pm10: float) -> float:
+        """
+        Calcule le score de risque pour les PM10 (particules grossières)
+        Source: API qualité air extérieur
+        
+        Niveaux PM10 (µg/m³):
+        - 0-54 : Bon
+        - 54-154 : Modéré
+        - 154-254 : Mauvais pour sensibles
+        - 254-354 : Mauvais
+        - > 354 : Dangereux
+        """
+        # Scores recalibrés
+        if pm10 > 354:       # Dangereux
+            return 15
+        elif pm10 > 254:     # Mauvais
+            return 12
+        elif pm10 > 154:     # Mauvais pour sensibles
+            return 8
+        elif pm10 > 54:      # Modéré
+            return 3
+        else:                # Bon
+            return 0
+
+    def calculate_pressure_score(self, pressure: float) -> float:
+        """
+        Calcule le score de risque pour la pression atmosphérique
+        Source: API météo
+        
+        Les changements brusques de pression peuvent déclencher des crises d'asthme
+        Pression normale: 1013 hPa
+        """
+        deviation = abs(pressure - 1013)
+        
+        # Scores recalibrés
+        if deviation > 30:       # Changement extrême
+            return 10
+        elif deviation > 20:     # Changement important
+            return 6
+        elif deviation > 10:     # Changement modéré
+            return 3
+        else:                    # Normal
+            return 0
+
+    def calculate_wind_score(self, wind_speed: float) -> float:
+        """
+        Calcule le score de risque pour la vitesse du vent
+        Source: API météo
+        
+        Le vent fort peut disperser pollens et polluants
+        """
+        # Scores recalibrés
+        if wind_speed > 50:      # Vent très fort (tempête)
+            return 10
+        elif wind_speed > 30:    # Vent fort
+            return 6
+        elif wind_speed > 20:    # Vent modéré-fort
+            return 3
+        else:                    # Vent faible
+            return 0
 
     def calculate_risk_factors(self, data: Dict) -> Tuple[float, List[RiskFactor]]:
         """
@@ -260,30 +351,60 @@ class RespiriaAIPredictor:
         """
         # Extraction optimisée avec validation rapide
         values = {
+            # === CAPTEURS PHYSIOLOGIQUES (MAX30102) ===
             'spo2': max(70.0, min(100.0, data.get('spo2', 96.0))),
             'heart_rate': max(30.0, min(220.0, data.get('heart_rate', 70.0))),
             'respiratory_rate': max(8.0, min(50.0, data.get('respiratory_rate', 16.0))),
-            'aqi': max(0.0, min(500.0, data.get('aqi', 50.0))),
+            
+            # === CAPTEURS ENVIRONNEMENTAUX (DHT11) ===
             'temperature': max(-20.0, min(60.0, data.get('temperature', 22.0))),
             'humidity': max(0.0, min(100.0, data.get('humidity', 50.0))),
+            
+            # === CAPTEURS QUALITÉ AIR INTÉRIEUR (CJMCU-811) ===
+            'eco2': max(0.0, min(10000.0, data.get('eco2', 400.0))),
+            'tvoc': max(0.0, min(5000.0, data.get('tvoc', 0.0))),
+            
+            # === DONNÉES API QUALITÉ AIR EXTÉRIEUR ===
+            'aqi': max(0.0, min(500.0, data.get('aqi', 50.0))),
+            'pm25': max(0.0, min(500.0, data.get('pm25', 12.0))),
+            'pm10': max(0.0, min(500.0, data.get('pm10', 18.0))),
             'pollen_level': max(0, min(5, data.get('pollen_level', 1))),
-            'eco2': max(0.0, min(10000.0, data.get('eco2', 400.0))),  # eCO2 capteur CJMCU-811
-            'tvoc': max(0.0, min(5000.0, data.get('tvoc', 0.0))),     # TVOC capteur CJMCU-811
+            
+            # === DONNÉES API MÉTÉO ===
+            'pressure': max(900.0, min(1100.0, data.get('pressure', 1013.0))),
+            'wind_speed': max(0.0, min(200.0, data.get('wind_speed', 0.0))),
+            
+            # === DONNÉES UTILISATEUR ===
             'medication_taken': data.get('medication_taken', True),
             'smoke_detected': data.get('smoke_detected', False)
         }
         
-        # Calcul des scores individuels - VECTORISÉ pour performance
+        # Calcul des scores individuels - TOUS LES CAPTEURS ET APIs
         scores = {
+            # Capteurs physiologiques
             'spo2': self.calculate_spo2_score(values['spo2']),
             'heart_rate': self.calculate_heart_rate_score(values['heart_rate']),
             'respiratory_rate': self.calculate_respiratory_rate_score(values['respiratory_rate']),
-            'aqi': self.calculate_aqi_score(values['aqi']),
+            
+            # Capteurs environnementaux
             'temperature': self.calculate_temperature_score(values['temperature']),
             'humidity': self.calculate_humidity_score(values['humidity']),
+            
+            # Capteurs qualité air intérieur
+            'eco2': self.calculate_eco2_score(values['eco2']),
+            'tvoc': self.calculate_tvoc_score(values['tvoc']),
+            
+            # API qualité air extérieur
+            'aqi': self.calculate_aqi_score(values['aqi']),
+            'pm25': self.calculate_pm25_score(values['pm25']),
+            'pm10': self.calculate_pm10_score(values['pm10']),
             'pollen_level': self.calculate_pollen_score(values['pollen_level']),
-            'eco2': self.calculate_eco2_score(values['eco2']),        # NOUVEAU
-            'tvoc': self.calculate_tvoc_score(values['tvoc']),        # NOUVEAU
+            
+            # API météo
+            'pressure': self.calculate_pressure_score(values['pressure']),
+            'wind_speed': self.calculate_wind_score(values['wind_speed']),
+            
+            # Utilisateur
             'medication_taken': self.calculate_medication_score(values['medication_taken']),
             'smoke_detected': self.calculate_smoke_score(values['smoke_detected'])
         }
@@ -422,6 +543,26 @@ class RespiriaAIPredictor:
                 'critical': "🚨 FUMÉE DÉTECTÉE - ÉVACUEZ IMMÉDIATEMENT",
                 'warning': "🚨 Fumée détectée dans l'environnement",
                 'info': "🚨 Trace de fumée détectée"
+            },
+            'pm25': {
+                'critical': f"🔴 PM2.5 dangereux ({value} µg/m³) - Particules fines!",
+                'warning': f"🟠 PM2.5 élevé ({value} µg/m³) - Air pollué",
+                'info': f"🟡 PM2.5 modéré ({value} µg/m³)"
+            },
+            'pm10': {
+                'critical': f"🔴 PM10 dangereux ({value} µg/m³) - Poussières!",
+                'warning': f"🟠 PM10 élevé ({value} µg/m³)",
+                'info': f"🟡 PM10 modéré ({value} µg/m³)"
+            },
+            'pressure': {
+                'critical': f"🌀 Pression atmosphérique extrême ({value} hPa)",
+                'warning': f"🌀 Changement de pression ({value} hPa)",
+                'info': f"🌀 Légère variation de pression ({value} hPa)"
+            },
+            'wind_speed': {
+                'critical': f"💨 Vent très fort ({value} km/h) - Tempête!",
+                'warning': f"💨 Vent fort ({value} km/h) - Pollens dispersés",
+                'info': f"💨 Vent modéré ({value} km/h)"
             }
         }
         
@@ -450,99 +591,211 @@ class RespiriaAIPredictor:
         pollen_level = data.get('pollen_level', 1)
         humidity = data.get('humidity', 50.0)
         medication_taken = data.get('medication_taken', True)
+        eco2 = data.get('eco2', 400)
+        tvoc = data.get('tvoc', 0)
         
-        # RECOMMANDATIONS IMMÉDIATES - Logique optimisée
-        # Conditions d'urgence (plus sensibles)
-        if spo2 < 88 or respiratory_rate > 30 or smoke_detected or risk_score > 75:
-            if spo2 < 85:  # Urgence extrême
-                recommendations["immediate"].extend([
-                    "🚨 URGENCE CRITIQUE : SpO2 < 85% - Appelez le 15 IMMÉDIATEMENT",
-                    "🏥 Préparez-vous pour hospitalisation d'urgence"
-                ])
-            elif spo2 < 88:  # Urgence sévère
-                recommendations["immediate"].extend([
-                    "🚨 URGENCE : SpO2 < 88% - Utilisez votre inhalateur IMMÉDIATEMENT",
-                    "📞 Si aucune amélioration en 5 min, appelez le 15"
-                ])
-            
-            if smoke_detected:
-                recommendations["immediate"].extend([
-                    "🚨 FUMÉE DÉTECTÉE - ÉVACUEZ LA ZONE IMMÉDIATEMENT",
-                    "📞 Appelez les secours si nécessaire (18/112)"
-                ])
-                
-            if respiratory_rate > 35:
-                recommendations["immediate"].append(
-                    "💨 Détresse respiratoire sévère - Position assise, inhalateur + 15"
-                )
-            elif respiratory_rate > 30:
-                recommendations["immediate"].append(
-                    "💨 Fréquence respiratoire critique - Asseyez-vous et respirez calmement"
-                )
-                
-            if risk_score > 85:
-                recommendations["immediate"].append(
-                    "📞 Contactez votre médecin préventivement"
-                )
+        # ============================================
+        # RECOMMANDATIONS PERSONNALISÉES PAR PROFIL
+        # ============================================
         
-        # RECOMMANDATIONS PRÉVENTIVES
-        if 40 < risk_score < 80 or not medication_taken:
-            if not medication_taken:
-                recommendations["preventive"].append("💊 Prenez votre traitement préventif immédiatement")
-                
-            if 40 < risk_score < 80:
-                recommendations["preventive"].append("🧘 Évitez les efforts intenses")
-                recommendations["preventive"].append("👀 Surveillez l'évolution de vos symptômes")
-                
-            if profile_id == 2:  # Asthmatique sévère
-                recommendations["preventive"].append("⚕️ Surveillez étroitement votre état")
+        # Noms des profils pour les messages
+        profile_names = {
+            0: "personne en prévention",
+            1: "asthmatique stable",
+            2: "asthmatique sévère",
+            3: "personne en rémission"
+        }
+        profile_name = profile_names.get(profile_id, "utilisateur")
         
-        # RECOMMANDATIONS ENVIRONNEMENTALES
+        # URGENCES - Différenciées par profil
+        if smoke_detected:
+            recommendations["immediate"].append("🚨 FUMÉE DÉTECTÉE - ÉVACUEZ LA ZONE IMMÉDIATEMENT")
+            if profile_id in [1, 2]:  # Asthmatiques
+                recommendations["immediate"].append("💨 Utilisez votre inhalateur de secours AVANT d'évacuer")
+            recommendations["immediate"].append("📞 Appelez les secours si nécessaire (18/112)")
+        
+        if spo2 < 85:
+            recommendations["immediate"].append("🚨 URGENCE CRITIQUE : SpO2 < 85% - Appelez le 15 IMMÉDIATEMENT")
+            recommendations["immediate"].append("🏥 Préparez-vous pour hospitalisation d'urgence")
+        elif spo2 < 88:
+            if profile_id == 2:  # Sévère
+                recommendations["immediate"].append("🚨 SpO2 < 88% : Utilisez votre inhalateur + appelez le 15")
+            elif profile_id == 1:  # Stable
+                recommendations["immediate"].append("🚨 SpO2 < 88% : Utilisez votre inhalateur immédiatement")
+                recommendations["immediate"].append("📞 Si aucune amélioration en 5 min, appelez le 15")
+            else:  # Prévention/Rémission
+                recommendations["immediate"].append("🚨 SpO2 anormalement bas - Consultez un médecin")
+        elif spo2 < 92:
+            if profile_id == 2:
+                recommendations["immediate"].append("⚠️ SpO2 bas pour asthme sévère - Surveillez de près")
+            elif profile_id == 1:
+                recommendations["immediate"].append("⚠️ SpO2 à surveiller - Gardez inhalateur à portée")
+        
+        if respiratory_rate > 35:
+            recommendations["immediate"].append("💨 Détresse respiratoire - Position assise + inhalateur")
+            if profile_id == 2:
+                recommendations["immediate"].append("🏥 Asthme sévère : appelez le 15 sans attendre")
+        elif respiratory_rate > 28:
+            if profile_id in [1, 2]:
+                recommendations["immediate"].append("💨 Respiration rapide - Utilisez votre inhalateur")
+            else:
+                recommendations["immediate"].append("💨 Respiration rapide - Asseyez-vous et calmez-vous")
+        
+        if risk_score > 85:
+            if profile_id == 2:
+                recommendations["immediate"].append("📞 Asthme sévère : contactez votre pneumologue")
+            elif profile_id == 1:
+                recommendations["immediate"].append("📞 Contactez votre médecin préventivement")
+            elif profile_id == 3:
+                recommendations["immediate"].append("⚠️ Rémission menacée : consultez rapidement")
+            else:
+                recommendations["immediate"].append("📞 Risque élevé : consultez un médecin")
+        
+        # RECOMMANDATIONS PRÉVENTIVES - Par profil
+        if not medication_taken:
+            if profile_id == 2:
+                recommendations["preventive"].append("💊 URGENT : Prenez votre traitement de fond immédiatement")
+                recommendations["preventive"].append("⚠️ Ne jamais sauter le traitement avec asthme sévère")
+            elif profile_id == 1:
+                recommendations["preventive"].append("💊 Prenez votre traitement préventif")
+            elif profile_id == 3:
+                recommendations["preventive"].append("💊 Reprenez votre traitement pour éviter une rechute")
+        
+        if 30 < risk_score < 70:
+            if profile_id == 0:  # Prévention
+                recommendations["preventive"].append("🧘 Conditions moyennes : évitez les efforts intenses")
+            elif profile_id == 1:  # Stable
+                recommendations["preventive"].append("🧘 Évitez les efforts, gardez votre inhalateur")
+                recommendations["preventive"].append("👀 Surveillez vos symptômes habituels")
+            elif profile_id == 2:  # Sévère
+                recommendations["preventive"].append("🛑 Restez au repos complet")
+                recommendations["preventive"].append("📱 Gardez votre téléphone à portée")
+                recommendations["preventive"].append("💊 Vérifiez que vous avez votre traitement d'urgence")
+            elif profile_id == 3:  # Rémission
+                recommendations["preventive"].append("🧘 Évitez les déclencheurs connus")
+                recommendations["preventive"].append("👀 Surveillez tout retour de symptômes")
+        
+        # RECOMMANDATIONS ENVIRONNEMENTALES - Personnalisées par profil
         if aqi > 150:
-            recommendations["environmental"].append("🌫️ Qualité d'air dangereuse : restez à l'intérieur")
+            if profile_id == 2:  # Sévère
+                recommendations["environmental"].append("🌫️ AQI DANGEREUX : NE SORTEZ PAS!")
+                recommendations["environmental"].append("💨 Purificateur d'air obligatoire")
+            elif profile_id == 1:  # Stable
+                recommendations["environmental"].append("🌫️ AQI dangereux : restez à l'intérieur")
+                recommendations["environmental"].append("💨 Utilisez un purificateur d'air")
+            else:
+                recommendations["environmental"].append("🌫️ Qualité d'air dégradée : limitez sorties")
             recommendations["environmental"].append("🪟 Fermez toutes les fenêtres")
-            recommendations["environmental"].append("💨 Utilisez un purificateur d'air si disponible")
+        elif aqi > 100:
+            if profile_id in [1, 2]:
+                recommendations["environmental"].append("🌫️ AQI modéré : évitez efforts extérieurs")
             
         if temperature < 10:
-            recommendations["environmental"].append("❄️ Froid extrême : couvrez votre nez et bouche")
-            recommendations["environmental"].append("🧣 Portez une écharpe sur le visage")
+            if profile_id in [1, 2]:  # Asthmatiques
+                recommendations["environmental"].append("❄️ Froid = risque bronchospasme : restez au chaud")
+                recommendations["environmental"].append("🧣 Couvrez nez et bouche impérativement")
+            else:
+                recommendations["environmental"].append("❄️ Froid : protégez vos voies respiratoires")
             
         if temperature > 32:
             recommendations["environmental"].append("🌡️ Forte chaleur : restez au frais")
+            if profile_id == 2:
+                recommendations["environmental"].append("🆘 Chaleur + asthme sévère : risque déshydratation")
             recommendations["environmental"].append("💧 Hydratez-vous régulièrement")
-            recommendations["environmental"].append("🏠 Utilisez la climatisation")
             
         if pollen_level >= 4:
-            recommendations["environmental"].append("🌸 Niveau de pollen très élevé")
+            if profile_id in [1, 2]:  # Asthmatiques
+                recommendations["environmental"].append("🌸 ALERTE POLLEN : Évitez absolument l'extérieur")
+                recommendations["environmental"].append("💊 Prenez un antihistaminique")
+            elif profile_id == 3:  # Rémission
+                recommendations["environmental"].append("🌸 Pollen élevé : attention aux rechutes")
+            else:
+                recommendations["environmental"].append("🌸 Niveau de pollen élevé")
             recommendations["environmental"].append("🪟 Gardez les fenêtres fermées")
-            recommendations["environmental"].append("👓 Portez des lunettes de soleil")
-            recommendations["environmental"].append("🚿 Douchez-vous en rentrant")
+        elif pollen_level >= 3:
+            if profile_id in [1, 2]:
+                recommendations["environmental"].append("🌸 Pollen modéré : soyez vigilant")
             
         if humidity > 80:
-            recommendations["environmental"].append("💧 Humidité excessive détectée")
-            recommendations["environmental"].append("🌀 Utilisez un déshumidificateur")
+            recommendations["environmental"].append("💧 Humidité excessive : risque moisissures")
+            if profile_id in [1, 2]:
+                recommendations["environmental"].append("🌀 Déshumidificateur fortement conseillé")
         
         # RECOMMANDATIONS ECO2 (CO2 du capteur CJMCU-811)
-        eco2 = data.get('eco2', 400)
         if eco2 > 2000:
             recommendations["environmental"].append("🏭 CO2 dangereux : aérez immédiatement!")
             recommendations["environmental"].append("🪟 Ouvrez les fenêtres en grand")
-            recommendations["environmental"].append("🚪 Quittez la pièce si possible")
+            if profile_id == 2:
+                recommendations["environmental"].append("🚪 Asthme sévère : quittez la pièce")
         elif eco2 > 1500:
             recommendations["environmental"].append("🏭 CO2 élevé : ventilation insuffisante")
             recommendations["environmental"].append("🪟 Ouvrez les fenêtres")
         elif eco2 > 1000:
-            recommendations["environmental"].append("🏭 CO2 modéré : pensez à aérer")
+            if profile_id in [1, 2]:
+                recommendations["environmental"].append("🏭 CO2 modéré : pensez à aérer")
         
         # RECOMMANDATIONS TVOC (polluants du capteur CJMCU-811)
-        tvoc = data.get('tvoc', 0)
         if tvoc > 660:
             recommendations["environmental"].append("☠️ TVOC dangereux : air pollué!")
-            recommendations["environmental"].append("🪟 Aérez abondamment")
-            recommendations["environmental"].append("🏃 Éloignez-vous de la source de pollution")
+            if profile_id in [1, 2]:
+                recommendations["environmental"].append("🏃 Quittez la pièce immédiatement")
+            else:
+                recommendations["environmental"].append("🪟 Aérez abondamment")
         elif tvoc > 220:
-            recommendations["environmental"].append("☠️ TVOC modéré : polluants détectés")
-            recommendations["environmental"].append("🪟 Améliorez la ventilation")
+            if profile_id in [1, 2]:
+                recommendations["environmental"].append("☠️ TVOC détecté : améliorez la ventilation")
+        
+        # RECOMMANDATIONS PM2.5 (particules fines - API Air Quality)
+        pm25 = data.get('pm25', 0)
+        if pm25 > 55:
+            if profile_id == 2:
+                recommendations["environmental"].append("🔴 PM2.5 DANGEREUX : NE SORTEZ PAS!")
+                recommendations["environmental"].append("😷 Masque FFP2 même à l'intérieur")
+            elif profile_id == 1:
+                recommendations["environmental"].append("🔴 PM2.5 dangereux : masque FFP2 obligatoire")
+            else:
+                recommendations["environmental"].append("🔴 PM2.5 dangereux : portez un masque")
+            recommendations["environmental"].append("🏠 Restez à l'intérieur")
+        elif pm25 > 35:
+            if profile_id in [1, 2]:
+                recommendations["environmental"].append("🟠 PM2.5 élevé : évitez l'extérieur")
+                recommendations["environmental"].append("😷 Masque recommandé si sortie")
+            else:
+                recommendations["environmental"].append("🟠 PM2.5 élevé : limitez efforts extérieurs")
+        elif pm25 > 12:
+            if profile_id == 2:
+                recommendations["environmental"].append("🟡 PM2.5 modéré : soyez vigilant")
+        
+        # RECOMMANDATIONS PM10 (grosses particules - API Air Quality)
+        pm10 = data.get('pm10', 0)
+        if pm10 > 100:
+            if profile_id in [1, 2]:
+                recommendations["environmental"].append("🔴 PM10 dangereux : restez à l'intérieur!")
+            else:
+                recommendations["environmental"].append("🔴 PM10 élevé : évitez les sorties")
+        elif pm10 > 50:
+            if profile_id in [1, 2]:
+                recommendations["environmental"].append("🟠 PM10 élevé : attention aux poussières")
+        
+        # RECOMMANDATIONS PRESSION ATMOSPHÉRIQUE (API Weather)
+        pressure = data.get('pressure', 1013)
+        if pressure < 990 or pressure > 1030:
+            if profile_id in [1, 2]:  # Asthmatiques sensibles aux changements de pression
+                recommendations["environmental"].append(f"🌀 Pression atypique ({pressure} hPa) : migraines/gêne possible")
+                if pressure < 990:
+                    recommendations["environmental"].append("⛈️ Dépression atmosphérique : restez vigilant")
+            if pressure > 1030:
+                recommendations["environmental"].append("☀️ Anticyclone : air stagnant possible")
+        
+        # RECOMMANDATIONS VENT (API Weather)
+        wind_speed = data.get('wind_speed', 0)
+        if wind_speed > 40:
+            recommendations["environmental"].append("💨 Vent très fort : restez à l'abri!")
+            if profile_id in [1, 2] and pollen_level >= 2:
+                recommendations["environmental"].append("🌸 Alerte : pollens dispersés intensément")
+        elif wind_speed > 20:
+            if profile_id in [1, 2] and pollen_level >= 2:
+                recommendations["environmental"].append("💨 Vent modéré + pollen : portez un masque")
         
         return recommendations
 

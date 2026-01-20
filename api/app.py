@@ -13,15 +13,7 @@ Endpoints:
 - /api/v1/history           → Historique des prédictions
 """
 
-try:
-    from flask import Flask, request, jsonify  # type: ignore
-    from flask_cors import CORS  # type: ignore
-    FLASK_AVAILABLE = True
-except ImportError:
-    FLASK_AVAILABLE = False
-    Flask = None
-    print("⚠️ Flask non installé - API désactivée (pip install flask flask-cors)")
-
+from typing import Optional
 from datetime import datetime, timedelta
 import os
 
@@ -41,6 +33,15 @@ DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 if not UBIDOTS_TOKEN:
     print("⚠️ UBIDOTS_TOKEN non défini - configurez la variable d'environnement")
 
+# Imports Flask (optionnels)
+try:
+    from flask import Flask, request, jsonify  # type: ignore
+    from flask_cors import CORS  # type: ignore
+    FLASK_AVAILABLE = True
+except ImportError:
+    FLASK_AVAILABLE = False
+    print("⚠️ Flask non installé - API désactivée (pip install flask flask-cors)")
+
 # Imports relatifs
 try:
     from .data_collector import RespiriaDataCollector
@@ -59,6 +60,9 @@ print("✅ Services initialisés")
 # Cache simple pour les prédictions
 prediction_cache = {}
 CACHE_TTL = 30  # 30 secondes
+
+# Créer l'application Flask si disponible
+app: Optional['Flask'] = None
 
 if FLASK_AVAILABLE:
     app = Flask(__name__)
@@ -200,21 +204,38 @@ if FLASK_AVAILABLE:
             
             print(f"📡 Capteurs: SpO2={sensor_data.get('spo2')}, eCO2={sensor_data.get('eco2_ppm')}, TVOC={sensor_data.get('tvoc_ppb')}")
             
-            # Construire les données de prédiction
+            # Construire les données de prédiction (16 variables total)
             respiria_data = {
+                # Capteurs physiologiques (MAX30102)
                 'spo2': sensor_override.get('spo2', sensor_data.get('spo2', 96.0)),
                 'heart_rate': sensor_override.get('heart_rate', sensor_data.get('heart_rate', 75.0)),
                 'respiratory_rate': sensor_override.get('respiratory_rate', sensor_data.get('respiratory_rate', 16.0)),
+                
+                # Capteurs environnementaux (DHT11)
+                'temperature': sensor_data.get('temperature_sensor', weather_data.get('temperature', 25.0)),
+                'humidity': sensor_data.get('humidity_sensor', weather_data.get('humidity', 50.0)),
+                
+                # Capteurs qualité air intérieur (CJMCU-811)
+                'eco2': sensor_data.get('eco2_ppm', 400.0),
+                'tvoc': sensor_data.get('tvoc_ppb', 0.0),
+                
+                # API Qualité de l'air extérieur
                 'aqi': air_quality.get('aqi', 50.0),
-                'temperature': sensor_data.get('temperature_sensor', weather_data.get('temperature', 25.0)),  # Priorité capteur DHT11
-                'humidity': sensor_data.get('humidity_sensor', weather_data.get('humidity', 50.0)),  # Priorité capteur DHT11
+                'pm25': air_quality.get('pm25', 10.0),        # PM2.5 particules fines
+                'pm10': air_quality.get('pm10', 20.0),        # PM10 grosses particules
                 'pollen_level': air_quality.get('pollen_level', 2),
-                'eco2': sensor_data.get('eco2_ppm', 400.0),    # Capteur CJMCU-811
-                'tvoc': sensor_data.get('tvoc_ppb', 0.0),      # Capteur CJMCU-811
+                
+                # API Météo
+                'pressure': weather_data.get('pressure', 1013),     # Pression atmosphérique
+                'wind_speed': weather_data.get('wind_speed', 5.0),  # Vitesse du vent
+                
+                # Données utilisateur
                 'smoke_detected': sensor_data.get('smoke_detected', sensor_override.get('smoke_detected', False)),
                 'medication_taken': medication_taken,
                 'profile_id': profile_id
             }
+            
+            print(f"🌡️ Environnement: PM2.5={respiria_data['pm25']}, PM10={respiria_data['pm10']}, Pression={respiria_data['pressure']}, Vent={respiria_data['wind_speed']}")
             
             # Faire la prédiction
             print(f"🧠 Prédiction IA (Profil {profile_id})...")
@@ -223,9 +244,17 @@ if FLASK_AVAILABLE:
             if not result.get('success'):
                 return jsonify(result), 500
             
-            # Enrichir avec données UI Flutter
-            risk_level = result.get('risk_level', 'LOW')
-            risk_score = result.get('risk_score', 0)
+            # Extraire les résultats du modèle
+            prediction = result.get('prediction', {})
+            risk_level = prediction.get('risk_level', 'low').upper()
+            risk_score = prediction.get('risk_score', 0)
+            confidence = prediction.get('confidence', 0.96)
+            should_notify = prediction.get('should_notify', False)
+            
+            # Facteurs et recommandations
+            risk_factors = result.get('risk_factors', [])
+            recommendations = result.get('recommendations', {})
+            profile_context = result.get('profile_context', {})
             
             # Couleurs et icônes pour Flutter
             ui_config = get_ui_config(risk_level)
@@ -242,11 +271,13 @@ if FLASK_AVAILABLE:
                     'risk_color': ui_config['color'],
                     'risk_gradient': ui_config['gradient'],
                     'risk_icon': ui_config['icon'],
-                    'confidence': 96
+                    'confidence': round(confidence * 100),
+                    'should_notify': should_notify
                 },
                 'message': messages,
-                'factors': result.get('factors', []),
-                'recommendations': result.get('recommendations', []),
+                'factors': risk_factors,
+                'recommendations': recommendations,
+                'profile_context': profile_context,
                 'environment': {
                     'weather': {
                         'temperature': weather_data.get('temperature'),
@@ -817,7 +848,10 @@ def main():
     print(f"   GET  /api/v1/sensors/latest   → Capteurs")
     print(f"   GET  /api/v1/environment      → Environnement")
     print()
-    app.run(host='0.0.0.0', port=port, debug=DEBUG)
+    if app is not None:
+        app.run(host='0.0.0.0', port=port, debug=DEBUG)
+    else:
+        print("❌ Flask non disponible")
 
 
 if __name__ == '__main__':

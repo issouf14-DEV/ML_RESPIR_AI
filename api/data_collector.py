@@ -283,35 +283,49 @@ class RespiriaDataCollector:
         
         try:
             headers = {'X-Auth-Token': UBIDOTS_TOKEN}
-            base_url = f"https://industrial.api.ubidots.com/api/v1.6/devices/{UBIDOTS_DEVICE_LABEL}"
+            
+            # Utiliser l'API v1.6 datasources avec l'ID du device
+            datasource_id = "696c16da6b8f94fd52f77962"
+            
+            # Récupérer les variables du datasource
+            vars_url = f"https://industrial.api.ubidots.com/api/v1.6/datasources/{datasource_id}/variables/"
+            vars_response = requests.get(vars_url, headers=headers, timeout=10)
             
             sensors = {}
-            variables = ['spo2', 'bpm', 'temperature', 'humidity', 'eco2', 'tvoc']
             
-            for var in variables:
-                try:
-                    response = requests.get(
-                        f"{base_url}/{var}/lv",
-                        headers=headers,
-                        timeout=5
-                    )
-                    if response.status_code == 200:
-                        sensors[var] = float(response.text)
-                    else:
-                        sensors[var] = 0
-                except:
-                    sensors[var] = 0
+            if vars_response.status_code == 200:
+                variables = vars_response.json().get('results', [])
+                
+                # Pour chaque variable, récupérer la dernière valeur
+                for var in variables:
+                    var_id = var.get('id')
+                    label = var.get('label')
+                    
+                    val_url = f"https://industrial.api.ubidots.com/api/v1.6/variables/{var_id}/values/?page_size=1"
+                    val_response = requests.get(val_url, headers=headers, timeout=5)
+                    
+                    if val_response.status_code == 200:
+                        values = val_response.json().get('results', [])
+                        if values and len(values) > 0:
+                            sensors[label] = float(values[0].get('value', 0))
             
             # Mapper les noms de variables
+            eco2_val = sensors.get('eco2', 400)
+            tvoc_val = sensors.get('tvoc', 0)
+            
+            # Détection fumée : seuils stricts (eCO2 > 4000 ET TVOC > 1000)
+            # ou TVOC très élevé seul (> 2000 = fumée certaine)
+            smoke_detected = (eco2_val > 4000 and tvoc_val > 1000) or tvoc_val > 2000
+            
             return {
                 'spo2': sensors.get('spo2', 96) if sensors.get('spo2', 0) > 0 else 96,
                 'heart_rate': sensors.get('bpm', 75) if sensors.get('bpm', 0) > 0 else 75,
                 'respiratory_rate': self._estimate_respiratory_rate(sensors.get('bpm', 75)),
                 'temperature_sensor': sensors.get('temperature', 25),
                 'humidity_sensor': sensors.get('humidity', 50),
-                'eco2_ppm': sensors.get('eco2', 400),
-                'tvoc_ppb': sensors.get('tvoc', 0),
-                'smoke_detected': sensors.get('eco2', 400) > 2000 or sensors.get('tvoc', 0) > 500,
+                'eco2_ppm': eco2_val,
+                'tvoc_ppb': tvoc_val,
+                'smoke_detected': smoke_detected,
                 'timestamp': datetime.now().isoformat(),
                 'source': 'ubidots_direct',
                 'status': 'success'
@@ -467,14 +481,14 @@ class RespiriaDataCollector:
             # Fallback vers collecte séparée
             return self.collect_all_data(user_id, location, auth_token)
 
-    def collect_all_data(self, user_id: str, location: Optional[str] = None, 
+    def collect_all_data(self, user_id: int | str, location: Optional[str] = None, 
                         auth_token: Optional[str] = None) -> Dict:
         """
         Collecte toutes les données nécessaires pour la prédiction
         Version fallback si endpoint unifié indisponible
         
         Args:
-            user_id: ID de l'utilisateur
+            user_id: ID de l'utilisateur (int ou str)
             location: Localisation (optionnel)
             auth_token: JWT Bearer token
         

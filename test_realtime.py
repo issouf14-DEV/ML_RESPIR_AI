@@ -1,105 +1,82 @@
-"""
-Test RESPIRIA avec données Ubidots en temps réel
-"""
-import requests  # type: ignore
-import json
-import warnings
+import sys
 import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'api'))
 
-# Charger les variables d'environnement
+from data_collector import RespiriaDataCollector
+from respiria_ai_predictor import RespiriaAIPredictor
+import json
+
+print("=" * 70)
+print("TEST API AVEC VOS VRAIES DONNEES UBIDOTS")
+print("=" * 70)
+
+# Créer le collecteur de données
+collector = RespiriaDataCollector()
+
+# Profil de test (Stable = profil 1)
+test_profile = 1
+
+print(f"\n📊 Récupération des données en temps réel depuis Ubidots...")
+print("-" * 70)
+
+# Récupérer les données réelles
 try:
-    from dotenv import load_dotenv  # type: ignore
-    load_dotenv()
-except ImportError:
-    pass
-
-# Désactiver avertissements SSL
-warnings.filterwarnings('ignore')
-
-print('='*60)
-print('TEST COMPLET AVEC DONNEES REELLES UBIDOTS')
-print('='*60)
-
-# Configuration depuis .env
-UBIDOTS_TOKEN = os.environ.get('UBIDOTS_TOKEN')
-DEVICE_LABEL = os.environ.get('UBIDOTS_DEVICE_LABEL', 'bracelet')
-ML_API_URL = os.environ.get('ML_API_URL', 'https://ml-respir-ai.onrender.com')
-
-if not UBIDOTS_TOKEN:
-    print("⚠️ UBIDOTS_TOKEN non défini dans .env")
-    exit(1)
-
-headers = {'X-Auth-Token': UBIDOTS_TOKEN}
-
-# 1. Récupérer données Ubidots réelles
-print('\n📡 RECUPERATION DONNEES UBIDOTS...')
-sensors = {}
-for var in ['spo2', 'bpm', 'temperature', 'humidity', 'eco2', 'tvoc']:
-    try:
-        url = f'https://industrial.api.ubidots.com/api/v1.6/devices/{DEVICE_LABEL}/{var}/lv'
-        r = requests.get(url, headers=headers, timeout=10, verify=False)
-        sensors[var] = float(r.text) if r.status_code == 200 else 0
-        print(f'  {var}: {sensors[var]}')
-    except Exception as e:
-        sensors[var] = 0
-        print(f'  {var}: Erreur - {e}')
-
-# 2. Test prédiction avec données réelles
-print('\n🔮 TEST PREDICTION /predict/auto...')
-payload = {
-    'user_id': 'ubidots_realtime',
-    'profile_id': 1,
-    'location': 'Abidjan',
-    'medication_taken': True,
-    'sensor_override': {
-        'spo2': sensors['spo2'] if sensors['spo2'] > 0 else 96,
-        'heart_rate': sensors['bpm'] if sensors['bpm'] > 0 else 75
-    }
-}
-
-try:
-    r = requests.post(f'{ML_API_URL}/predict/auto', json=payload, timeout=60, verify=False)
-    result = r.json()
-    print(f'  Status: {r.status_code}')
-    print(f'  Risk Level: {result.get("prediction", {}).get("risk_level")}')
-    print(f'  Risk Score: {result.get("prediction", {}).get("risk_score")}')
-    print(f'  Confidence: {result.get("prediction", {}).get("confidence")}')
-    print(f'  Message: {result.get("profile_context", {}).get("message")}')
+    sensor_data = collector.get_ubidots_direct()
+    
+    print("✓ Données récupérées:")
+    print(f"  SpO2: {sensor_data['spo2']}%")
+    print(f"  BPM: {sensor_data['heart_rate']}")
+    print(f"  Température: {sensor_data['temperature_sensor']}°C")
+    print(f"  Humidité: {sensor_data['humidity_sensor']}%")
+    print(f"  eCO2: {sensor_data['eco2_ppm']} ppm")
+    print(f"  TVOC: {sensor_data['tvoc_ppb']} ppb")
+    print(f"  Fumée détectée: {sensor_data['smoke_detected']}")
+    
+    # Récupérer données externes
+    print("\n📡 Récupération des données externes (météo, AQI)...")
+    external_data = collector.collect_all_data(user_id=1)  # User ID de test
+    
+    # Ajouter le profil dans les données
+    external_data['profile_id'] = test_profile
+    
+    print(f"  Données collectées: {len(external_data)} champs")
+    
+    # Créer le prédicteur
+    predictor = RespiriaAIPredictor()
+    
+    # Faire la prédiction avec les vraies données
+    print(f"\n🤖 PRÉDICTION RESPIRIA AI (Profil {test_profile})...")
+    print("-" * 70)
+    
+    result = predictor.predict(external_data)
+    
+    print(f"\n🎯 RÉSULTAT:")
+    print(f"  Score de risque: {result.get('overall_risk_score', result.get('risk_score', 'N/A'))}/100")
+    print(f"  Niveau: {result.get('risk_level', 'N/A')}")
+    
+    print(f"\n📋 Détails des facteurs:")
+    factors = result.get('risk_factors', result.get('factors', []))
+    for factor in factors:
+        print(f"  - {factor.get('name', 'N/A')}: {factor.get('value', 'N/A')} → {factor.get('contribution_percent', factor.get('percentage', 0))}% du risque")
+        if factor.get('message'):
+            print(f"    {factor['message']}")
+    
+    print(f"\n💡 RECOMMANDATIONS:")
+    recs = result.get('recommendations', [])
+    for i, rec in enumerate(recs, 1):
+        print(f"  {i}. {rec}")
+    
+    # Vérifier fumée
+    print("\n" + "=" * 70)
+    if sensor_data['smoke_detected']:
+        print("⚠️  ALERTE: FUMÉE DÉTECTÉE (eCO2={}, TVOC={})".format(
+            sensor_data['eco2_ppm'], sensor_data['tvoc_ppb']))
+    else:
+        print("✅ AUCUNE FUMÉE DÉTECTÉE (eCO2={} ppm, TVOC={} ppb)".format(
+            sensor_data['eco2_ppm'], sensor_data['tvoc_ppb']))
+    print("=" * 70)
+    
 except Exception as e:
-    print(f'  Erreur: {e}')
-
-# 3. Test endpoint /api/v1/predict (v2.0)
-print('\n🔮 TEST PREDICTION /api/v1/predict (v2.0)...')
-v2_payload = {
-    'user_id': 'ubidots_test',
-    'profile_id': 1,
-    'location': 'Abidjan',
-    'medication_taken': True,
-    'sensor_data': {
-        'spo2': sensors['spo2'] if sensors['spo2'] > 0 else 96,
-        'heart_rate': sensors['bpm'] if sensors['bpm'] > 0 else 75
-    }
-}
-
-try:
-    r = requests.post(f'{ML_API_URL}/api/v1/predict', json=v2_payload, timeout=60, verify=False)
-    result = r.json()
-    print(f'  Status: {r.status_code}')
-    print(f'  Risk Level: {result.get("prediction", {}).get("risk_level")}')
-    print(f'  Risk Score: {result.get("prediction", {}).get("risk_score")}')
-    print(f'  Message: {result.get("message", {}).get("title")}')
-except Exception as e:
-    print(f'  Erreur: {e}')
-
-# 4. Test health
-print('\n❤️ HEALTH CHECK...')
-try:
-    r = requests.get(f'{ML_API_URL}/health', timeout=30, verify=False)
-    print(f'  Status: {r.status_code}')
-    print(json.dumps(r.json(), indent=2))
-except Exception as e:
-    print(f'  Erreur: {e}')
-
-print('\n' + '='*60)
-print('TEST TERMINE')
-print('='*60)
+    print(f"\n✗ Erreur: {e}")
+    import traceback
+    traceback.print_exc()
